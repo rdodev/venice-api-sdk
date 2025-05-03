@@ -3,6 +3,7 @@ from .models import GenerateImageRequest
 from typing import Union
 import mimetypes
 import logging
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -27,9 +28,18 @@ class ImageAPI:
 
         Returns:
             The binary image data.
+
+        Raises:
+            VeniceAPIError: If the API request fails or returns invalid/empty image data.
         """
+        logger.debug(f"Generating image with model: {request.model}, prompt length: {len(request.prompt)}")
         response = self.client.post("/image/generate", json=request.dict(exclude_none=True))
+        logger.debug(f"Response status: {response.status_code}")
+        logger.debug(f"Response headers: {response.headers}")
+        logger.debug(f"Response content length: {len(response.content)} bytes")
         self._validate_image_response(response)
+        if not response.content:
+            raise VeniceAPIError("API returned an empty response body")
         return response.content
 
     def generate_image_simple(self, prompt: str, model: str, **kwargs) -> bytes:
@@ -42,7 +52,11 @@ class ImageAPI:
 
         Returns:
             The binary image data.
+
+        Raises:
+            VeniceAPIError: If the API request fails or returns invalid/empty image data.
         """
+        logger.debug(f"Generating image with prompt length: {len(prompt)}, model: {model}")
         request = GenerateImageRequest(prompt=prompt, model=model, **kwargs)
         return self.generate_image(request)
 
@@ -62,7 +76,6 @@ class ImageAPI:
             FileNotFoundError: If the input image file does not exist.
             VeniceAPIError: If the API request fails or returns invalid/empty image data.
         """
-        import os
         if not os.path.isfile(image_path):
             raise FileNotFoundError(f"Input image not found: {image_path}")
 
