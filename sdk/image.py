@@ -1,9 +1,7 @@
 from .client import VeniceClient, VeniceAPIError
 from .models import GenerateImageRequest
 from typing import Union
-import mimetypes
 import logging
-import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -60,43 +58,37 @@ class ImageAPI:
         request = GenerateImageRequest(prompt=prompt, model=model, **kwargs)
         return self.generate_image(request)
 
-    def upscale_image(self, image_path: str, scale: Union[int, float] = 2, enhance: str = "false", **kwargs) -> bytes:
-        """Upscale an image.
+    def upscale_image(self, image_base64: str, scale: float = 2.0, enhance: bool = False, **kwargs) -> bytes:
+        """Upscale an image using a JSON request with a base64-encoded image string.
 
         Args:
-            image_path: Path to the image file to upscale.
-            scale: The scale factor (1-4).
-            enhance: Whether to enhance the image ("true" or "false").
-            **kwargs: Additional optional parameters.
+            image_base64: The base64-encoded string of the image to upscale.
+            scale: The scale factor (1-4). Default is 2.0.
+            enhance: Whether to enhance the image. Default is False.
+            **kwargs: Additional optional parameters (e.g., enhanceCreativity, enhancePrompt, replication).
 
         Returns:
             The binary upscaled image data.
 
         Raises:
-            FileNotFoundError: If the input image file does not exist.
             VeniceAPIError: If the API request fails or returns invalid/empty image data.
         """
-        if not os.path.isfile(image_path):
-            raise FileNotFoundError(f"Input image not found: {image_path}")
+        request_data = {
+            "image": image_base64,
+            "scale": scale,
+            "enhance": enhance,
+            **kwargs
+        }
+        response = self.client.post("/image/upscale", json=request_data)
 
-        logger.debug(f"Uploading image: {image_path} with scale={scale}, enhance={enhance}")
-        with open(image_path, "rb") as f:
-            # Guess MIME type based on file extension
-            mime_type, _ = mimetypes.guess_type(image_path)
-            if not mime_type or not mime_type.startswith("image/"):
-                mime_type = "application/octet-stream"
-            files = {"image": (os.path.basename(image_path), f, mime_type)}
-            data = {"scale": scale, "enhance": enhance, **{k: str(v) for k, v in kwargs.items()}}
-            response = self.client.post("/image/upscale", files=files, data=data)
+        logger.debug(f"Response status: {response.status_code}")
+        logger.debug(f"Response headers: {response.headers}")
+        logger.debug(f"Response content length: {len(response.content)} bytes")
 
-            logger.debug(f"Response status: {response.status_code}")
-            logger.debug(f"Response headers: {response.headers}")
-            logger.debug(f"Response content length: {len(response.content)} bytes")
-
-            self._validate_image_response(response)
-            if not response.content:
-                raise VeniceAPIError("API returned an empty response body")
-            return response.content
+        self._validate_image_response(response)
+        if not response.content:
+            raise VeniceAPIError("API returned an empty response body")
+        return response.content
 
     def _validate_image_response(self, response):
         """Validate that the response contains valid image data.
